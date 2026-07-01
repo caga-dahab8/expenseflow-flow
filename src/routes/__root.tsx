@@ -90,7 +90,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           "ExpenseFlow is a modern expense management dashboard for tracking spending, budgets, categories and financial analytics in one clean workspace.",
       },
       { name: "author", content: "ExpenseFlow" },
-      { property: "og:title", content: "ExpenseFlow — Spend smarter" },
+      { property: "og:title", content: "ExpenseFlow — Daily expense management for modern teams" },
       {
         property: "og:description",
         content:
@@ -98,6 +98,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "ExpenseFlow — Daily expense management for modern teams" },
+      { name: "description", content: "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard." },
+      { property: "og:description", content: "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard." },
+      { name: "twitter:description", content: "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/946575a0-20d3-498e-9c00-ea13fcbcbbf0" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/946575a0-20d3-498e-9c00-ea13fcbcbbf0" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
