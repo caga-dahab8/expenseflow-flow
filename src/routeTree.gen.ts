@@ -9,15 +9,23 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReportsRouteImport } from './routes/reports'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as BudgetsRouteImport } from './routes/budgets'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 
+const WorkspacesRoute = WorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -28,9 +36,19 @@ const ReportsRoute = ReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExpensesRoute = ExpensesRouteImport.update({
@@ -65,9 +83,12 @@ export interface FileRoutesByFullPath {
   '/budgets': typeof BudgetsRoute
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/workspaces': typeof WorkspacesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -75,9 +96,12 @@ export interface FileRoutesByTo {
   '/budgets': typeof BudgetsRoute
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/workspaces': typeof WorkspacesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,9 +110,12 @@ export interface FileRoutesById {
   '/budgets': typeof BudgetsRoute
   '/categories': typeof CategoriesRoute
   '/expenses': typeof ExpensesRoute
+  '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/register': typeof RegisterRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
+  '/workspaces': typeof WorkspacesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -98,9 +125,12 @@ export interface FileRouteTypes {
     | '/budgets'
     | '/categories'
     | '/expenses'
+    | '/login'
     | '/profile'
+    | '/register'
     | '/reports'
     | '/settings'
+    | '/workspaces'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -108,9 +138,12 @@ export interface FileRouteTypes {
     | '/budgets'
     | '/categories'
     | '/expenses'
+    | '/login'
     | '/profile'
+    | '/register'
     | '/reports'
     | '/settings'
+    | '/workspaces'
   id:
     | '__root__'
     | '/'
@@ -118,9 +151,12 @@ export interface FileRouteTypes {
     | '/budgets'
     | '/categories'
     | '/expenses'
+    | '/login'
     | '/profile'
+    | '/register'
     | '/reports'
     | '/settings'
+    | '/workspaces'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -129,13 +165,23 @@ export interface RootRouteChildren {
   BudgetsRoute: typeof BudgetsRoute
   CategoriesRoute: typeof CategoriesRoute
   ExpensesRoute: typeof ExpensesRoute
+  LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
+  RegisterRoute: typeof RegisterRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
+  WorkspacesRoute: typeof WorkspacesRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/workspaces': {
+      id: '/workspaces'
+      path: '/workspaces'
+      fullPath: '/workspaces'
+      preLoaderRoute: typeof WorkspacesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -150,11 +196,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/expenses': {
@@ -201,10 +261,23 @@ const rootRouteChildren: RootRouteChildren = {
   BudgetsRoute: BudgetsRoute,
   CategoriesRoute: CategoriesRoute,
   ExpensesRoute: ExpensesRoute,
+  LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
+  RegisterRoute: RegisterRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
+  WorkspacesRoute: WorkspacesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

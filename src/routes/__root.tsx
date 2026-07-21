@@ -6,8 +6,11 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useNavigate,
+  useRouterState,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -16,6 +19,10 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api-client";
+import { useCurrentUser } from "@/lib/auth";
+import { WorkspaceProvider } from "@/lib/workspace";
 
 function NotFoundComponent() {
   return (
@@ -99,11 +106,31 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "ExpenseFlow — Daily expense management for modern teams" },
-      { name: "description", content: "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard." },
-      { property: "og:description", content: "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard." },
-      { name: "twitter:description", content: "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/946575a0-20d3-498e-9c00-ea13fcbcbbf0" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/946575a0-20d3-498e-9c00-ea13fcbcbbf0" },
+      {
+        name: "description",
+        content:
+          "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard.",
+      },
+      {
+        property: "og:description",
+        content:
+          "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard.",
+      },
+      {
+        name: "twitter:description",
+        content:
+          "ExpenseFlow simplifies daily expense tracking with a modern, production-ready frontend dashboard.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/946575a0-20d3-498e-9c00-ea13fcbcbbf0",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/946575a0-20d3-498e-9c00-ea13fcbcbbf0",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -142,17 +169,64 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={200}>
-        <SidebarProvider>
-          <AppSidebar />
-          <SidebarInset>
-            <AppTopbar />
-            <main className="flex-1 space-y-8 p-4 md:p-8">
-              <Outlet />
-            </main>
-          </SidebarInset>
-        </SidebarProvider>
+        <ApplicationLayout />
         <Toaster richColors position="top-right" />
       </TooltipProvider>
     </QueryClientProvider>
+  );
+}
+
+function ApplicationLayout() {
+  const path = useRouterState({ select: (state) => state.location.pathname });
+  const navigate = useNavigate();
+  const auth = useCurrentUser();
+  const publicRoute = path === "/login" || path === "/register";
+  const unauthenticated = auth.error instanceof ApiError && auth.error.status === 401;
+
+  useEffect(() => {
+    if (!publicRoute && unauthenticated) void navigate({ to: "/login", replace: true });
+  }, [navigate, publicRoute, unauthenticated]);
+
+  if (publicRoute) return <Outlet />;
+
+  if (auth.isPending || unauthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-7 w-7 animate-spin text-primary" />
+          <p className="mt-3 text-sm text-muted-foreground">Loading your workspace…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (auth.isError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="max-w-sm text-center">
+          <h1 className="font-display text-xl font-semibold">We couldn't reach ExpenseFlow</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Make sure the API is running, then try again.
+          </p>
+          <Button className="mt-5" onClick={() => auth.refetch()}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <WorkspaceProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <AppTopbar />
+          <main className="flex-1 space-y-8 p-4 md:p-8">
+            <Outlet />
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </WorkspaceProvider>
   );
 }

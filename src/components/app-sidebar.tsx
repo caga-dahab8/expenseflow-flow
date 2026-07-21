@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Receipt,
@@ -8,10 +8,10 @@ import {
   BarChart3,
   User,
   Settings,
+  PanelsTopLeft,
   LogOut,
   Sparkles,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { useLogout } from "@/lib/auth";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
 const nav = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -35,11 +37,14 @@ const nav = [
 ];
 
 const account = [
+  { title: "Workspaces", url: "/workspaces", icon: PanelsTopLeft },
   { title: "Profile", url: "/profile", icon: User },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
+  const navigate = useNavigate();
+  const logout = useLogout();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const isActive = (u: string) => (u === "/" ? path === "/" : path.startsWith(u));
 
@@ -55,6 +60,7 @@ export function AppSidebar() {
             <span className="text-xs text-muted-foreground">Spend smarter</span>
           </div>
         </div>
+        <WorkspaceSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -97,7 +103,11 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip="Logout"
-              onClick={() => toast.success("Logged out (demo)")}
+              disabled={logout.isPending}
+              onClick={async () => {
+                await logout.mutateAsync();
+                await navigate({ to: "/login", replace: true });
+              }}
             >
               <LogOut />
               <span>Logout</span>

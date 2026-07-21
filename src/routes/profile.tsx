@@ -17,16 +17,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { user } from "@/lib/mock-data";
+import { initials, useCurrentUser } from "@/lib/auth";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
-    meta: [{ title: "Profile — ExpenseFlow" }, { name: "description", content: "Manage your account information." }],
+    meta: [
+      { title: "Profile — ExpenseFlow" },
+      { name: "description", content: "Manage your account information." },
+    ],
   }),
   component: ProfilePage,
 });
 
 function ProfilePage() {
+  const auth = useCurrentUser();
+  const user = auth.data!.user;
+  const currency = user.preferences.currency ?? "USD";
+  const language = user.preferences.language ?? "en-US";
+  const timezone = user.preferences.timezone ?? "UTC";
   return (
     <>
       <PageHeader title="Profile" description="Update your personal information and preferences." />
@@ -36,8 +44,8 @@ function ProfilePage() {
           <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
             <div className="relative">
               <Avatar className="h-24 w-24">
-                <AvatarImage src={user.avatar} />
-                <AvatarFallback>AB</AvatarFallback>
+                <AvatarImage src={user.avatarUrl ?? undefined} />
+                <AvatarFallback>{initials(user.name)}</AvatarFallback>
               </Avatar>
               <Button size="icon" className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full">
                 <Camera className="h-4 w-4" />
@@ -61,11 +69,16 @@ function ProfilePage() {
         </Card>
 
         <Card className="rounded-xl lg:col-span-2">
-          <CardHeader><CardTitle className="text-base">Personal information</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-base">Personal information</CardTitle>
+          </CardHeader>
           <CardContent>
             <form
               className="grid gap-4 sm:grid-cols-2"
-              onSubmit={(e) => { e.preventDefault(); toast.success("Profile updated"); }}
+              onSubmit={(e) => {
+                e.preventDefault();
+                toast.success("Profile updated");
+              }}
             >
               <div className="grid gap-2">
                 <Label>Full name</Label>
@@ -77,36 +90,60 @@ function ProfilePage() {
               </div>
               <div className="grid gap-2">
                 <Label>Phone</Label>
-                <Input defaultValue={user.phone} />
+                <Input placeholder="Add a phone number" />
               </div>
               <div className="grid gap-2">
                 <Label>Currency</Label>
-                <Select defaultValue={user.currency}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select defaultValue={currency}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {["USD", "EUR", "GBP", "JPY", "INR", "CAD"].map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
+                    {["USD", "EUR", "GBP", "JPY", "INR", "CAD"].map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label>Language</Label>
-                <Select defaultValue={user.language}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select defaultValue={language}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {["English (US)", "English (UK)", "Français", "Deutsch", "Español", "日本語"].map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    {["en-US", "en-GB", "fr", "de", "es", "ja"].map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label>Timezone</Label>
-                <Select defaultValue={user.timezone}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select defaultValue={timezone}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {["America/Los_Angeles", "America/New_York", "Europe/London", "Europe/Berlin", "Asia/Tokyo"].map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
+                    {[
+                      timezone,
+                      "Africa/Nairobi",
+                      "America/Los_Angeles",
+                      "America/New_York",
+                      "Europe/London",
+                      "Europe/Berlin",
+                      "Asia/Tokyo",
+                    ]
+                      .filter((value, index, values) => values.indexOf(value) === index)
+                      .map((c) => (
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -120,17 +157,24 @@ function ProfilePage() {
             <div className="space-y-4">
               <div>
                 <div className="text-sm font-semibold">Change password</div>
-                <p className="text-xs text-muted-foreground">Use at least 12 characters, mixing letters and numbers.</p>
+                <p className="text-xs text-muted-foreground">
+                  Use at least 12 characters, mixing letters and numbers.
+                </p>
               </div>
               <form
                 className="grid gap-3 sm:grid-cols-3"
-                onSubmit={(e) => { e.preventDefault(); toast.success("Password updated"); }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  toast.success("Password updated");
+                }}
               >
                 <Input type="password" placeholder="Current password" />
                 <Input type="password" placeholder="New password" />
                 <Input type="password" placeholder="Confirm password" />
                 <div className="sm:col-span-3 flex justify-end">
-                  <Button type="submit" variant="outline">Update password</Button>
+                  <Button type="submit" variant="outline">
+                    Update password
+                  </Button>
                 </div>
               </form>
             </div>

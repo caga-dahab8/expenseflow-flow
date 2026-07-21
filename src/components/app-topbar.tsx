@@ -13,17 +13,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { notifications, user } from "@/lib/mock-data";
+import { notifications } from "@/lib/mock-data";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { initials, useCurrentUser, useLogout } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
 
 export function AppTopbar() {
+  const navigate = useNavigate();
+  const auth = useCurrentUser();
+  const logout = useLogout();
+  const { activeWorkspace } = useWorkspace();
+  const user = auth.data!.user;
   const unread = notifications.filter((n) => n.unread).length;
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-6">
@@ -75,12 +78,14 @@ export function AppTopbar() {
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-full p-1 pr-3 transition-colors hover:bg-muted">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback>AB</AvatarFallback>
+                <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+                <AvatarFallback>{initials(user.name)}</AvatarFallback>
               </Avatar>
               <div className="hidden text-left leading-tight sm:block">
                 <div className="text-xs font-medium">{user.name}</div>
-                <div className="text-[11px] text-muted-foreground">Admin</div>
+                <div className="text-[11px] capitalize text-muted-foreground">
+                  {activeWorkspace?.role ?? "member"}
+                </div>
               </div>
             </button>
           </DropdownMenuTrigger>
@@ -97,7 +102,13 @@ export function AppTopbar() {
               Billing
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => toast.success("Logged out (demo)")}>
+            <DropdownMenuItem
+              disabled={logout.isPending}
+              onClick={async () => {
+                await logout.mutateAsync();
+                await navigate({ to: "/login", replace: true });
+              }}
+            >
               Logout
             </DropdownMenuItem>
           </DropdownMenuContent>
