@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { z } from "zod";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -59,6 +60,7 @@ import {
 } from "@/lib/financial-data";
 
 export const Route = createFileRoute("/expenses")({
+  validateSearch: z.object({ q: z.string().max(100).optional().catch(undefined) }),
   head: () => ({
     meta: [
       { title: "Expenses — ExpenseFlow" },
@@ -69,7 +71,8 @@ export const Route = createFileRoute("/expenses")({
 });
 
 function ExpensesPage() {
-  const [search, setSearch] = useState("");
+  const routeSearch = Route.useSearch();
+  const [search, setSearch] = useState(routeSearch.q ?? "");
   const [categoryId, setCategoryId] = useState("all");
   const [sort, setSort] = useState<"date" | "amount">("date");
   const [page, setPage] = useState(1);
@@ -86,6 +89,11 @@ function ExpensesPage() {
     total: 0,
     totalPages: 1,
   };
+
+  useEffect(() => {
+    setSearch(routeSearch.q ?? "");
+    setPage(1);
+  }, [routeSearch.q]);
 
   function openNew() {
     setEditing(null);

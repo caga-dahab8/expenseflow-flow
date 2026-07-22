@@ -1,23 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function useTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const theme = useSyncExternalStore(
+    (notify) => {
+      window.addEventListener("expenseflow:theme-changed", notify);
+      window.addEventListener("storage", notify);
+      return () => {
+        window.removeEventListener("expenseflow:theme-changed", notify);
+        window.removeEventListener("storage", notify);
+      };
+    },
+    () => (localStorage.getItem("theme") === "dark" ? "dark" : "light"),
+    () => "light",
+  );
   useEffect(() => {
-    const stored = (typeof window !== "undefined" && localStorage.getItem("theme")) as
-      | "light"
-      | "dark"
-      | null;
-    const initial = stored ?? "light";
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
   const toggle = () => {
     const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
     document.documentElement.classList.toggle("dark", next === "dark");
     localStorage.setItem("theme", next);
+    window.dispatchEvent(new Event("expenseflow:theme-changed"));
   };
   return { theme, toggle };
 }

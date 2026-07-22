@@ -30,7 +30,6 @@ const registerForm = z.object({
   email: z.string().email("Enter a valid email address."),
   password: z.string().min(10, "Use at least 10 characters.").max(128),
   currency: z.string().length(3),
-  timezone: z.string().min(1),
 });
 type RegisterInput = z.infer<typeof registerForm>;
 
@@ -43,11 +42,9 @@ function RegisterPage() {
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
   const register = useRegister();
-  const timezone =
-    typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
   const form = useForm<RegisterInput>({
     resolver: zodResolver(registerForm),
-    defaultValues: { name: "", email: "", password: "", currency: "USD", timezone },
+    defaultValues: { name: "", email: "", password: "", currency: "USD" },
   });
 
   useEffect(() => {
@@ -56,7 +53,11 @@ function RegisterPage() {
 
   async function submit(input: RegisterInput) {
     try {
-      await register.mutateAsync(input);
+      await register.mutateAsync({
+        ...input,
+        timezone:
+          typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC",
+      });
       await navigate({ to: "/" });
     } catch (error) {
       form.setError("root", {
@@ -126,7 +127,7 @@ function RegisterPage() {
                   </FormItem>
                 )}
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3">
                 <FormField
                   control={form.control}
                   name="currency"
@@ -147,19 +148,6 @@ function RegisterPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="timezone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Timezone</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

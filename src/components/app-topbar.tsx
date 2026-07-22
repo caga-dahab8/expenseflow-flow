@@ -1,10 +1,11 @@
-import { Bell, Search } from "lucide-react";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Bell, ChevronDown, LogOut, PanelsTopLeft, Search, Settings, User } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,103 +14,145 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ThemeToggle } from "@/components/theme-toggle";
-import { notifications } from "@/lib/mock-data";
-import { toast } from "sonner";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { initials, useCurrentUser, useLogout } from "@/lib/auth";
-import { useWorkspace } from "@/lib/workspace";
+import { useIncomingWorkspaceInvitations, useWorkspace } from "@/lib/workspace";
 
 export function AppTopbar() {
   const navigate = useNavigate();
   const auth = useCurrentUser();
   const logout = useLogout();
+  const invitations = useIncomingWorkspaceInvitations();
   const { activeWorkspace } = useWorkspace();
+  const [search, setSearch] = useState("");
   const user = auth.data!.user;
-  const unread = notifications.filter((n) => n.unread).length;
+  const pending = invitations.data?.invitations ?? [];
+
+  async function submitSearch(event: FormEvent) {
+    event.preventDefault();
+    await navigate({ to: "/expenses", search: { q: search.trim() || undefined } });
+  }
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 md:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 md:px-6">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="h-6" />
-      <div className="relative hidden max-w-md flex-1 md:block">
+      <form
+        className="relative hidden max-w-lg flex-1 md:block"
+        onSubmit={submitSearch}
+        role="search"
+      >
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search expenses, categories, reports…"
-          className="h-9 pl-9 rounded-lg bg-muted/40 border-transparent focus-visible:bg-background"
+          aria-label="Search expenses"
+          placeholder="Search expenses…"
+          className="h-9 rounded-lg border-transparent bg-muted/50 pl-9 focus-visible:bg-background"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
         />
-      </div>
+      </form>
       <div className="ml-auto flex items-center gap-1.5">
         <ThemeToggle />
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative"
+              aria-label="Workspace invitations"
+            >
               <Bell className="h-4 w-4" />
-              {unread > 0 && (
-                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                  {unread}
+              {pending.length > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                  {pending.length}
                 </span>
               )}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0">
             <div className="flex items-center justify-between border-b px-4 py-3">
-              <span className="text-sm font-semibold">Notifications</span>
-              <Badge variant="secondary">{unread} new</Badge>
+              <span className="text-sm font-semibold">Invitations</span>
+              {pending.length > 0 && <Badge variant="secondary">{pending.length} pending</Badge>}
             </div>
-            <div className="max-h-96 overflow-y-auto">
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className="flex flex-col gap-1 border-b px-4 py-3 last:border-0 hover:bg-muted/50"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{n.title}</span>
-                    {n.unread && <span className="h-2 w-2 rounded-full bg-primary" />}
-                  </div>
-                  <span className="text-xs text-muted-foreground">{n.body}</span>
-                  <span className="text-[11px] text-muted-foreground/80">{n.time}</span>
-                </div>
-              ))}
-            </div>
+            {invitations.isPending ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                Checking invitations…
+              </p>
+            ) : pending.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                You have no pending invitations.
+              </p>
+            ) : (
+              <div className="divide-y">
+                {pending.slice(0, 4).map((invitation) => (
+                  <Link
+                    key={invitation.id}
+                    to="/workspaces"
+                    className="block px-4 py-3 transition-colors hover:bg-muted/50"
+                  >
+                    <p className="text-sm font-medium">{invitation.workspace.name}</p>
+                    <p className="mt-1 text-xs capitalize text-muted-foreground">
+                      {invitation.workspace.type} workspace · {invitation.role}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
           </PopoverContent>
         </Popover>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 rounded-full p-1 pr-3 transition-colors hover:bg-muted">
+            <button
+              className="flex items-center gap-2 rounded-lg p-1 pr-2 transition-colors hover:bg-muted"
+              aria-label="Open account menu"
+            >
               <Avatar className="h-8 w-8">
                 <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
                 <AvatarFallback>{initials(user.name)}</AvatarFallback>
               </Avatar>
-              <div className="hidden text-left leading-tight sm:block">
-                <div className="text-xs font-medium">{user.name}</div>
-                <div className="text-[11px] capitalize text-muted-foreground">
+              <div className="hidden max-w-40 text-left leading-tight sm:block">
+                <div className="truncate text-xs font-medium">{user.name}</div>
+                <div className="truncate text-[11px] capitalize text-muted-foreground">
                   {activeWorkspace?.role ?? "member"}
                 </div>
               </div>
+              <ChevronDown className="hidden h-3.5 w-3.5 text-muted-foreground sm:block" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuLabel className="font-normal">
+              <p className="truncate text-sm font-medium">{user.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/profile">Profile</Link>
+              <Link to="/profile">
+                <User className="mr-2 h-4 w-4" /> Profile
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/settings">Settings</Link>
+              <Link to="/workspaces">
+                <PanelsTopLeft className="mr-2 h-4 w-4" /> Workspaces
+              </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => toast("Billing coming soon")}>
-              Billing
+            <DropdownMenuItem asChild>
+              <Link to="/settings">
+                <Settings className="mr-2 h-4 w-4" /> Settings
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               disabled={logout.isPending}
+              className="text-destructive focus:text-destructive"
               onClick={async () => {
                 await logout.mutateAsync();
                 await navigate({ to: "/login", replace: true });
               }}
             >
-              Logout
+              <LogOut className="mr-2 h-4 w-4" /> Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

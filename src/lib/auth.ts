@@ -90,6 +90,38 @@ export function useLogout() {
   });
 }
 
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; email: string; currency: string }) =>
+      apiRequest<{ user: AuthUser }>("/api/auth/profile", {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData<AuthResponse>(authQueryKey, (current) =>
+        current ? { ...current, user } : { user },
+      );
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (input: { currentPassword: string; newPassword: string }) =>
+      apiRequest<void>("/api/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+  });
+}
+
+export function useLogoutOtherSessions() {
+  return useMutation({
+    mutationFn: () => apiRequest<void>("/api/auth/logout-other-sessions", { method: "POST" }),
+  });
+}
+
 export function initials(name: string) {
   return name
     .split(/\s+/)

@@ -103,7 +103,6 @@ function WorkspacesPage() {
   const [name, setName] = useState("");
   const [type, setType] = useState<WorkspaceSummary["type"]>("personal");
   const [currency, setCurrency] = useState("USD");
-  const [timezone, setTimezone] = useState("UTC");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"admin" | "member" | "viewer">("member");
 
@@ -113,7 +112,6 @@ function WorkspacesPage() {
     setName(selected.name);
     setType(selected.type);
     setCurrency(selected.settings?.defaultCurrency ?? "USD");
-    setTimezone(selected.settings?.timezone ?? "UTC");
   }, [details.data?.workspace]);
 
   const selected = details.data?.workspace;
@@ -124,7 +122,7 @@ function WorkspacesPage() {
   async function saveSettings(event: React.FormEvent) {
     event.preventDefault();
     try {
-      await updateWorkspace.mutateAsync({ name: name.trim(), type, currency, timezone });
+      await updateWorkspace.mutateAsync({ name: name.trim(), type, currency });
       toast.success("Workspace settings updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not update workspace");
@@ -325,7 +323,7 @@ function WorkspacesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3">
                   <div className="space-y-2">
                     <Label>Currency</Label>
                     <Select value={currency} onValueChange={setCurrency} disabled={!canManage}>
@@ -340,15 +338,6 @@ function WorkspacesPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="workspace-timezone">Timezone</Label>
-                    <Input
-                      id="workspace-timezone"
-                      value={timezone}
-                      onChange={(event) => setTimezone(event.target.value)}
-                      disabled={!canManage}
-                    />
                   </div>
                 </div>
                 {canManage && (

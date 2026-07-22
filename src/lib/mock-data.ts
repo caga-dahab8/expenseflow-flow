@@ -169,6 +169,4 @@ export const user = {
   phone: "+1 (415) 555-0132",
   avatar: "https://i.pravatar.cc/128?img=47",
   currency: "USD",
-  language: "English (US)",
-  timezone: "America/Los_Angeles",
 };

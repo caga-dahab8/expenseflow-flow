@@ -1,130 +1,144 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Download, KeyRound, Loader2, MonitorCog, PanelsTopLeft, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { Download, HardDriveDownload, ShieldAlert } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useTheme } from "@/components/theme-toggle";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { apiDownload } from "@/lib/api-client";
+import { useLogoutOtherSessions } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
-    meta: [{ title: "Settings — ExpenseFlow" }, { name: "description", content: "Appearance, data and account settings." }],
+    meta: [
+      { title: "Settings — ExpenseFlow" },
+      { name: "description", content: "Appearance, security, and data settings." },
+    ],
   }),
   component: SettingsPage,
 });
 
 function SettingsPage() {
   const { theme, toggle } = useTheme();
+  const { activeWorkspace } = useWorkspace();
+  const logoutOtherSessions = useLogoutOtherSessions();
+
+  async function exportData() {
+    try {
+      const today = new Date();
+      const start = `${today.getFullYear() - 4}-01-01`;
+      const end = today.toISOString().slice(0, 10);
+      const { blob, filename } = await apiDownload(
+        `/api/reports/export.csv?start=${start}&end=${end}`,
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename ?? "expenseflow-export.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Export downloaded");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not export your data");
+    }
+  }
+
   return (
     <>
-      <PageHeader title="Settings" description="Customize how ExpenseFlow looks and behaves." />
+      <PageHeader
+        title="Settings"
+        description="Control your app experience, security, and workspace data."
+      />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-5 lg:grid-cols-2">
         <Card className="rounded-xl">
-          <CardHeader><CardTitle className="text-base">Appearance</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Dark mode</Label>
-                <p className="text-xs text-muted-foreground">Reduce glare and save battery on OLED screens.</p>
-              </div>
-              <Switch checked={theme === "dark"} onCheckedChange={toggle} />
-            </div>
-            <div className="grid gap-2">
-              <Label>Currency</Label>
-              <Select defaultValue="USD">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["USD", "EUR", "GBP", "JPY", "INR", "CAD"].map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Language</Label>
-              <Select defaultValue="English (US)">
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {["English (US)", "English (UK)", "Français", "Deutsch", "Español", "日本語"].map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-xl">
-          <CardHeader><CardTitle className="text-base">Data & backup</CardTitle></CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Automatic backups</Label>
-                <p className="text-xs text-muted-foreground">Encrypted daily snapshots to your linked storage.</p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button variant="outline" onClick={() => toast.success("Backup started")}>
-                <HardDriveDownload className="mr-1.5 h-4 w-4" /> Backup now
-              </Button>
-              <Button variant="outline" onClick={() => toast.success("Export queued (CSV)")}>
-                <Download className="mr-1.5 h-4 w-4" /> Export all data
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-xl border-rose-200/60 dark:border-rose-900/40 lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base text-rose-600">
-              <ShieldAlert className="h-4 w-4" /> Danger zone
+            <CardTitle className="flex items-center gap-2 text-base">
+              <MonitorCog className="h-4 w-4 text-primary" /> Appearance
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-            <div>
-              <div className="text-sm font-medium">Delete account</div>
-              <p className="text-xs text-muted-foreground">This will permanently remove your account and all associated data.</p>
+          <CardContent>
+            <div className="flex items-center justify-between gap-6 rounded-lg border p-4">
+              <div>
+                <Label htmlFor="dark-mode">Dark mode</Label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Use a darker color scheme throughout ExpenseFlow.
+                </p>
+              </div>
+              <Switch id="dark-mode" checked={theme === "dark"} onCheckedChange={toggle} />
             </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive">Delete account</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action is permanent. All expenses, budgets and reports will be erased.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => toast.success("Account scheduled for deletion")}>
-                    Yes, delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-primary" /> Security
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-col justify-between gap-3 rounded-lg border p-4 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-sm font-medium">Other signed-in devices</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  End every other session while keeping this device signed in.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                disabled={logoutOtherSessions.isPending}
+                onClick={async () => {
+                  try {
+                    await logoutOtherSessions.mutateAsync();
+                    toast.success("Other sessions signed out");
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Could not end sessions");
+                  }
+                }}
+              >
+                {logoutOtherSessions.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Sign out others
+              </Button>
+            </div>
+            <Button variant="ghost" className="justify-start" asChild>
+              <Link to="/profile">
+                <KeyRound className="mr-2 h-4 w-4" /> Change password
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Download className="h-4 w-4 text-primary" /> Workspace data
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-sm font-medium">
+                Export {activeWorkspace?.name ?? "active workspace"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Download the current workspace’s expense records as a CSV file.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" asChild>
+                <Link to="/workspaces">
+                  <PanelsTopLeft className="mr-2 h-4 w-4" /> Manage workspace
+                </Link>
+              </Button>
+              <Button onClick={exportData}>
+                <Download className="mr-2 h-4 w-4" /> Export CSV
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

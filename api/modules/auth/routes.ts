@@ -1,4 +1,5 @@
 import argon2 from "argon2";
+import { randomBytes } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { ObjectId } from "mongodb";
 import { getDatabase, mongoClient } from "../../database/client.js";
@@ -12,7 +13,17 @@ import {
   setSessionCookie,
 } from "../../lib/auth.js";
 import { defaultCategories } from "./defaults.js";
-import { loginSchema, registerSchema } from "./schemas.js";
+import {
+  avatarSchema,
+  changePasswordSchema,
+  deleteAccountSchema,
+  emailSchema,
+  loginSchema,
+  registerSchema,
+  resetPasswordSchema,
+  tokenSchema,
+  updateProfileSchema,
+} from "./schemas.js";
 
 type UserDocument = {
   _id: ObjectId;
@@ -39,6 +50,7 @@ function publicUser(user: UserDocument) {
     name: user.name,
     email: user.email,
     avatarUrl: user.avatarUrl ?? null,
+    emailVerified: !!user.emailVerifiedAt,
     preferences: user.preferences ?? {},
   };
 }
@@ -64,6 +76,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       const accountId = new ObjectId();
       const sessionId = new ObjectId();
       const sessionToken = createSessionToken();
+      const verificationToken = randomBytes(32).toString("hex");
       const expiresAt = sessionExpiry();
       const passwordHash = await argon2.hash(input.password, { type: argon2.argon2id });
       const session = mongoClient.startSession();
@@ -166,6 +179,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
             },
             { session },
           );
+          await db.collection("authTokens").insertOne(
+            {
+              userId,
+              purpose: "verify_email",
+              tokenHash: hashSessionToken(verificationToken),
+              expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+              createdAt: now,
+            },
+            { session },
+          );
           await db.collection("auditLogs").insertOne(
             {
               workspaceId,
@@ -203,6 +226,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
           type: "personal",
           role: "owner",
         },
+        verificationToken,
       });
     },
   );
@@ -254,6 +278,220 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (token) {
       const db = await getDatabase();
       await db.collection("authSessions").deleteOne({ tokenHash: hashSessionToken(token) });
+    }
+    clearSessionCookie(reply);
+    return reply.code(204).send();
+  });
+
+  app.patch("/auth/profile", { preHandler: authenticate }, async (request, reply) => {
+    const input = updateProfileSchema.parse(request.body);
+    const db = await getDatabase();
+    const emailNormalized = input.email.toLowerCase();
+    const duplicate = await db.collection("users").findOne({
+      emailNormalized,
+      _id: { $ne: request.auth!.userId },
+    });
+    if (duplicate) {
+      return reply
+        .code(409)
+        .send({ error: "EMAIL_EXISTS", message: "An account with this email already exists." });
+    }
+
+    const user = await db.collection<UserDocument>("users").findOneAndUpdate(
+      { _id: request.auth!.userId, status: "active" },
+      {
+        $set: {
+          name: input.name,
+          email: input.email,
+          emailNormalized,
+          "preferences.currency": input.currency,
+          updatedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" },
+    );
+    if (!user) {
+      return reply
+        .code(404)
+        .send({ error: "USER_NOT_FOUND", message: "Your account could not be found." });
+    }
+    return { user: publicUser(user) };
+  });
+
+  app.post("/auth/change-password", { preHandler: authenticate }, async (request, reply) => {
+    const input = changePasswordSchema.parse(request.body);
+    const db = await getDatabase();
+    const user = await db.collection<UserDocument>("users").findOne({ _id: request.auth!.userId });
+    if (!user?.passwordHash || !(await argon2.verify(user.passwordHash, input.currentPassword))) {
+      return reply.code(400).send({
+        error: "CURRENT_PASSWORD_INVALID",
+        message: "The current password is incorrect.",
+      });
+    }
+    if (await argon2.verify(user.passwordHash, input.newPassword)) {
+      return reply.code(400).send({
+        error: "PASSWORD_UNCHANGED",
+        message: "Choose a password different from your current password.",
+      });
+    }
+
+    await db.collection("users").updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          passwordHash: await argon2.hash(input.newPassword, { type: argon2.argon2id }),
+          updatedAt: new Date(),
+        },
+      },
+    );
+    return reply.code(204).send();
+  });
+
+  app.post("/auth/logout-other-sessions", { preHandler: authenticate }, async (request, reply) => {
+    const token = request.cookies[SESSION_COOKIE];
+    const db = await getDatabase();
+    await db.collection("authSessions").deleteMany({
+      userId: request.auth!.userId,
+      ...(token ? { tokenHash: { $ne: hashSessionToken(token) } } : {}),
+    });
+    return reply.code(204).send();
+  });
+
+  app.patch("/auth/avatar", { preHandler: authenticate }, async (request) => {
+    const { dataUrl } = avatarSchema.parse(request.body);
+    const db = await getDatabase();
+    const user = await db.collection<UserDocument>("users").findOneAndUpdate(
+      { _id: request.auth!.userId, status: "active" },
+      { $set: { avatarUrl: dataUrl, updatedAt: new Date() } },
+      { returnDocument: "after" },
+    );
+    return { user: publicUser(user!) };
+  });
+
+  app.post("/auth/request-verification", { preHandler: authenticate }, async () => {
+    const db = await getDatabase();
+    const token = randomBytes(32).toString("hex");
+    const now = new Date();
+    await db.collection("authTokens").deleteMany({
+      userId: request.auth!.userId,
+      purpose: "verify_email",
+      usedAt: { $exists: false },
+    });
+    await db.collection("authTokens").insertOne({
+      userId: request.auth!.userId,
+      purpose: "verify_email",
+      tokenHash: hashSessionToken(token),
+      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      createdAt: now,
+    });
+    return { token };
+  });
+
+  app.post("/auth/verify-email", async (request, reply) => {
+    const { token } = tokenSchema.parse(request.body);
+    const db = await getDatabase();
+    const now = new Date();
+    const record = await db.collection("authTokens").findOneAndUpdate(
+      {
+        tokenHash: hashSessionToken(token),
+        purpose: "verify_email",
+        expiresAt: { $gt: now },
+        usedAt: { $exists: false },
+      },
+      { $set: { usedAt: now } },
+      { returnDocument: "after" },
+    );
+    if (!record) {
+      return reply.code(400).send({ error: "INVALID_TOKEN", message: "This verification link is invalid or expired." });
+    }
+    await db.collection("users").updateOne(
+      { _id: record.userId },
+      { $set: { emailVerifiedAt: now, updatedAt: now } },
+    );
+    return reply.code(204).send();
+  });
+
+  app.post("/auth/forgot-password", async (request) => {
+    const { email } = emailSchema.parse(request.body);
+    const db = await getDatabase();
+    const user = await db.collection<UserDocument>("users").findOne({
+      emailNormalized: email.toLowerCase(),
+      status: "active",
+    });
+    if (!user) return { accepted: true };
+    const token = randomBytes(32).toString("hex");
+    const now = new Date();
+    await db.collection("authTokens").deleteMany({
+      userId: user._id,
+      purpose: "reset_password",
+      usedAt: { $exists: false },
+    });
+    await db.collection("authTokens").insertOne({
+      userId: user._id,
+      purpose: "reset_password",
+      tokenHash: hashSessionToken(token),
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      createdAt: now,
+    });
+    return { accepted: true, token };
+  });
+
+  app.post("/auth/reset-password", async (request, reply) => {
+    const input = resetPasswordSchema.parse(request.body);
+    const db = await getDatabase();
+    const now = new Date();
+    const record = await db.collection("authTokens").findOneAndUpdate(
+      {
+        tokenHash: hashSessionToken(input.token),
+        purpose: "reset_password",
+        expiresAt: { $gt: now },
+        usedAt: { $exists: false },
+      },
+      { $set: { usedAt: now } },
+      { returnDocument: "after" },
+    );
+    if (!record) {
+      return reply.code(400).send({ error: "INVALID_TOKEN", message: "This reset link is invalid or expired." });
+    }
+    await db.collection("users").updateOne(
+      { _id: record.userId },
+      { $set: { passwordHash: await argon2.hash(input.password, { type: argon2.argon2id }), updatedAt: now } },
+    );
+    await db.collection("authSessions").deleteMany({ userId: record.userId });
+    return reply.code(204).send();
+  });
+
+  app.delete("/auth/account", { preHandler: authenticate }, async (request, reply) => {
+    const { password } = deleteAccountSchema.parse(request.body);
+    const db = await getDatabase();
+    const user = await db.collection<UserDocument>("users").findOne({ _id: request.auth!.userId });
+    if (!user?.passwordHash || !(await argon2.verify(user.passwordHash, password))) {
+      return reply.code(400).send({ error: "PASSWORD_INVALID", message: "The password is incorrect." });
+    }
+    const now = new Date();
+    const session = mongoClient.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await db.collection("users").updateOne(
+          { _id: user._id },
+          { $set: { status: "deletion_pending", updatedAt: now } },
+          { session },
+        );
+        await db.collection("workspaces").updateMany(
+          { ownerId: user._id },
+          { $set: { status: "archived", updatedAt: now } },
+          { session },
+        );
+        await db.collection("workspaceMembers").updateMany(
+          { userId: user._id },
+          { $set: { status: "removed", updatedAt: now } },
+          { session },
+        );
+        await db.collection("authSessions").deleteMany({ userId: user._id }, { session });
+        await db.collection("authTokens").deleteMany({ userId: user._id }, { session });
+      });
+    } finally {
+      await session.endSession();
     }
     clearSessionCookie(reply);
     return reply.code(204).send();
