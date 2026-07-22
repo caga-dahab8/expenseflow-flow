@@ -70,19 +70,36 @@ if (!isLocal || port !== 27018) {
   if (!(await canConnect())) {
     const projectRoot = resolve(import.meta.dirname, "../..");
     const dataPath = resolve(projectRoot, ".mongodb/data");
-    const configPath = resolve(projectRoot, ".mongodb/mongod.cfg");
+    const logPath = resolve(projectRoot, ".mongodb/mongod.log");
     const executable =
       process.env.MONGOD_PATH ?? "C:\\Program Files\\MongoDB\\Server\\8.0\\bin\\mongod.exe";
     if (!existsSync(executable)) {
-      throw new Error(`MongoDB executable was not found at ${executable}.`);
+      throw new Error(
+        `MongoDB executable was not found at ${executable}. Install MongoDB 8.0 or set MONGOD_PATH to your mongod executable.`,
+      );
     }
-    if (!existsSync(configPath)) throw new Error(`MongoDB config was not found at ${configPath}.`);
     mkdirSync(dataPath, { recursive: true });
-    const child = spawn(executable, ["--config", configPath], {
-      detached: true,
-      windowsHide: true,
-      stdio: "ignore",
-    });
+    const child = spawn(
+      executable,
+      [
+        "--dbpath",
+        dataPath,
+        "--logpath",
+        logPath,
+        "--logappend",
+        "--port",
+        String(port),
+        "--bind_ip",
+        host,
+        "--replSet",
+        "rs0",
+      ],
+      {
+        detached: true,
+        windowsHide: true,
+        stdio: "ignore",
+      },
+    );
     child.unref();
     await waitForPort();
     console.log(`Started local MongoDB on ${host}:${port}.`);
