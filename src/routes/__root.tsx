@@ -180,7 +180,13 @@ function ApplicationLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
   const auth = useCurrentUser();
-  const publicRoute = path === "/login" || path === "/register";
+  const publicRoute = [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+  ].includes(path);
   const unauthenticated = auth.error instanceof ApiError && auth.error.status === 401;
 
   useEffect(() => {

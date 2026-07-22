@@ -125,10 +125,6 @@ async function seed() {
     workspaceId: workspace._id,
     externalId: `${SEED_VERSION}-000`,
   });
-  if (existingSeed) {
-    console.log(`Demo data already exists in ${workspace.name}; nothing was duplicated.`);
-    return;
-  }
 
   const [account, categories] = await Promise.all([
     db.collection("accounts").findOne({
@@ -155,37 +151,39 @@ async function seed() {
 
   const currency = workspace.settings?.defaultCurrency ?? account.currency ?? "USD";
   const now = new Date();
-  const transactions = Array.from({ length: 12 }, (_, monthOffset) =>
-    Array.from({ length: 6 }, (_, itemIndex) => {
-      const templateIndex = (monthOffset * 3 + itemIndex) % expenseTemplates.length;
-      const template = expenseTemplates[templateIndex];
-      const category = categoriesByName.get(template.category)!;
-      const sequence = monthOffset * 6 + itemIndex;
-      const variation = ((monthOffset + 2) * (itemIndex + 3) * 137) % 2600;
-      return {
-        _id: new ObjectId(),
-        workspaceId: workspace._id,
-        accountId: account._id,
-        categoryId: category._id,
-        type: "expense",
-        title: template.title,
-        description: "Development demo data",
-        amountMinor: template.base + variation,
-        currency,
-        transactionDate: dateInMonth(monthOffset, itemIndex),
-        paymentMethod: template.paymentMethod,
-        status: "completed",
-        merchant: template.merchant,
-        reference: `DEMO-${String(sequence + 1).padStart(3, "0")}`,
-        tags: ["demo"],
-        source: "import",
-        externalId: `${SEED_VERSION}-${String(sequence).padStart(3, "0")}`,
-        createdBy: workspace.ownerId,
-        createdAt: now,
-        updatedAt: now,
-      };
-    }),
-  ).flat();
+  const transactions = existingSeed
+    ? []
+    : Array.from({ length: 12 }, (_, monthOffset) =>
+        Array.from({ length: 6 }, (_, itemIndex) => {
+          const templateIndex = (monthOffset * 3 + itemIndex) % expenseTemplates.length;
+          const template = expenseTemplates[templateIndex];
+          const category = categoriesByName.get(template.category)!;
+          const sequence = monthOffset * 6 + itemIndex;
+          const variation = ((monthOffset + 2) * (itemIndex + 3) * 137) % 2600;
+          return {
+            _id: new ObjectId(),
+            workspaceId: workspace._id,
+            accountId: account._id,
+            categoryId: category._id,
+            type: "expense",
+            title: template.title,
+            description: "Development demo data",
+            amountMinor: template.base + variation,
+            currency,
+            transactionDate: dateInMonth(monthOffset, itemIndex),
+            paymentMethod: template.paymentMethod,
+            status: "completed",
+            merchant: template.merchant,
+            reference: `DEMO-${String(sequence + 1).padStart(3, "0")}`,
+            tags: ["demo"],
+            source: "import",
+            externalId: `${SEED_VERSION}-${String(sequence).padStart(3, "0")}`,
+            createdBy: workspace.ownerId,
+            createdAt: now,
+            updatedAt: now,
+          };
+        }),
+      ).flat();
 
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(
@@ -234,10 +232,75 @@ async function seed() {
     0,
   );
   const session = mongoClient.startSession();
+  const foodCategory = categoriesByName.get("food & dining")!;
+  const recurringExists = await db.collection("recurringTransactions").findOne({
+    workspaceId: workspace._id,
+    title: "Monthly groceries",
+  });
+  const savedReportExists = await db.collection("savedReports").findOne({
+    workspaceId: workspace._id,
+    name: "Current year spending",
+  });
   try {
     await session.withTransaction(async () => {
-      await db.collection("transactions").insertMany(transactions, { session });
+      if (transactions.length)
+        await db.collection("transactions").insertMany(transactions, { session });
       if (newBudgets.length) await db.collection("budgets").insertMany(newBudgets, { session });
+      if (!recurringExists)
+        await db.collection("recurringTransactions").insertOne(
+          {
+            workspaceId: workspace._id,
+            accountId: account._id,
+            categoryId: foodCategory._id,
+            type: "expense",
+            title: "Monthly groceries",
+            description: "Example recurring expense",
+            amountMinor: 20000,
+            currency,
+            frequency: "monthly",
+            interval: 1,
+            startDate: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 12)),
+            nextRunAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 12)),
+            autoCreate: true,
+            status: "active",
+            createdBy: workspace.ownerId,
+            createdAt: now,
+            updatedAt: now,
+          },
+          { session },
+        );
+      if (!savedReportExists)
+        await db.collection("savedReports").insertOne(
+          {
+            workspaceId: workspace._id,
+            name: "Current year spending",
+            reportType: "spending",
+            filters: {
+              start: `${now.getUTCFullYear()}-01-01`,
+              end: now.toISOString().slice(0, 10),
+            },
+            createdBy: workspace.ownerId,
+            createdAt: now,
+            updatedAt: now,
+          },
+          { session },
+        );
+      await db.collection("notifications").updateOne(
+        { userId: workspace.ownerId, workspaceId: workspace._id, title: "Automation is ready" },
+        {
+          $setOnInsert: {
+            userId: workspace.ownerId,
+            workspaceId: workspace._id,
+            type: "system",
+            title: "Automation is ready",
+            message:
+              "Recurring expenses, CSV import, saved reports, and activity history are available.",
+            actionUrl: "/automation",
+            createdAt: now,
+          },
+        },
+        { upsert: true, session },
+      );
       await db
         .collection("accounts")
         .updateOne(
@@ -267,7 +330,7 @@ async function seed() {
   }
 
   console.log(
-    `Seeded ${transactions.length} expenses and ${newBudgets.length} budgets into ${workspace.name}.`,
+    `Seed complete for ${workspace.name}: ${transactions.length} new expenses, ${newBudgets.length} budgets, and automation examples.`,
   );
 }
 

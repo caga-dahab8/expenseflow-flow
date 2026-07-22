@@ -14,6 +14,7 @@ import { transactionRoutes } from "./modules/transactions/routes.js";
 import { budgetRoutes } from "./modules/budgets/routes.js";
 import { dashboardRoutes } from "./modules/dashboard/routes.js";
 import { reportRoutes } from "./modules/reports/routes.js";
+import { operationRoutes } from "./modules/operations/routes.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -41,6 +42,7 @@ export async function buildApp() {
   await app.register(budgetRoutes, { prefix: "/api" });
   await app.register(dashboardRoutes, { prefix: "/api" });
   await app.register(reportRoutes, { prefix: "/api" });
+  await app.register(operationRoutes, { prefix: "/api" });
 
   app.setNotFoundHandler((_request, reply) => {
     reply.code(404).send({ error: "NOT_FOUND", message: "The requested endpoint does not exist." });

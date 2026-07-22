@@ -32,6 +32,7 @@ type UserDocument = {
   emailNormalized: string;
   passwordHash?: string;
   avatarUrl?: string;
+  emailVerifiedAt?: Date;
   status: "active" | "suspended" | "deletion_pending";
   preferences?: {
     currency?: string;
@@ -360,15 +361,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/auth/avatar", { preHandler: authenticate }, async (request) => {
     const { dataUrl } = avatarSchema.parse(request.body);
     const db = await getDatabase();
-    const user = await db.collection<UserDocument>("users").findOneAndUpdate(
-      { _id: request.auth!.userId, status: "active" },
-      { $set: { avatarUrl: dataUrl, updatedAt: new Date() } },
-      { returnDocument: "after" },
-    );
+    const user = await db
+      .collection<UserDocument>("users")
+      .findOneAndUpdate(
+        { _id: request.auth!.userId, status: "active" },
+        { $set: { avatarUrl: dataUrl, updatedAt: new Date() } },
+        { returnDocument: "after" },
+      );
     return { user: publicUser(user!) };
   });
 
-  app.post("/auth/request-verification", { preHandler: authenticate }, async () => {
+  app.post("/auth/request-verification", { preHandler: authenticate }, async (request) => {
     const db = await getDatabase();
     const token = randomBytes(32).toString("hex");
     const now = new Date();
@@ -402,12 +405,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       { returnDocument: "after" },
     );
     if (!record) {
-      return reply.code(400).send({ error: "INVALID_TOKEN", message: "This verification link is invalid or expired." });
+      return reply
+        .code(400)
+        .send({ error: "INVALID_TOKEN", message: "This verification link is invalid or expired." });
     }
-    await db.collection("users").updateOne(
-      { _id: record.userId },
-      { $set: { emailVerifiedAt: now, updatedAt: now } },
-    );
+    await db
+      .collection("users")
+      .updateOne({ _id: record.userId }, { $set: { emailVerifiedAt: now, updatedAt: now } });
     return reply.code(204).send();
   });
 
@@ -451,11 +455,18 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       { returnDocument: "after" },
     );
     if (!record) {
-      return reply.code(400).send({ error: "INVALID_TOKEN", message: "This reset link is invalid or expired." });
+      return reply
+        .code(400)
+        .send({ error: "INVALID_TOKEN", message: "This reset link is invalid or expired." });
     }
     await db.collection("users").updateOne(
       { _id: record.userId },
-      { $set: { passwordHash: await argon2.hash(input.password, { type: argon2.argon2id }), updatedAt: now } },
+      {
+        $set: {
+          passwordHash: await argon2.hash(input.password, { type: argon2.argon2id }),
+          updatedAt: now,
+        },
+      },
     );
     await db.collection("authSessions").deleteMany({ userId: record.userId });
     return reply.code(204).send();
@@ -466,27 +477,35 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const db = await getDatabase();
     const user = await db.collection<UserDocument>("users").findOne({ _id: request.auth!.userId });
     if (!user?.passwordHash || !(await argon2.verify(user.passwordHash, password))) {
-      return reply.code(400).send({ error: "PASSWORD_INVALID", message: "The password is incorrect." });
+      return reply
+        .code(400)
+        .send({ error: "PASSWORD_INVALID", message: "The password is incorrect." });
     }
     const now = new Date();
     const session = mongoClient.startSession();
     try {
       await session.withTransaction(async () => {
-        await db.collection("users").updateOne(
-          { _id: user._id },
-          { $set: { status: "deletion_pending", updatedAt: now } },
-          { session },
-        );
-        await db.collection("workspaces").updateMany(
-          { ownerId: user._id },
-          { $set: { status: "archived", updatedAt: now } },
-          { session },
-        );
-        await db.collection("workspaceMembers").updateMany(
-          { userId: user._id },
-          { $set: { status: "removed", updatedAt: now } },
-          { session },
-        );
+        await db
+          .collection("users")
+          .updateOne(
+            { _id: user._id },
+            { $set: { status: "deletion_pending", updatedAt: now } },
+            { session },
+          );
+        await db
+          .collection("workspaces")
+          .updateMany(
+            { ownerId: user._id },
+            { $set: { status: "archived", updatedAt: now } },
+            { session },
+          );
+        await db
+          .collection("workspaceMembers")
+          .updateMany(
+            { userId: user._id },
+            { $set: { status: "removed", updatedAt: now } },
+            { session },
+          );
         await db.collection("authSessions").deleteMany({ userId: user._id }, { session });
         await db.collection("authTokens").deleteMany({ userId: user._id }, { session });
       });

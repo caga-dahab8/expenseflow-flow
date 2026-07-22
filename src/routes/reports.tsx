@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Loader2, ReceiptText, TrendingUp, Wallet } from "lucide-react";
 import { useState } from "react";
+import { z } from "zod";
 import {
   Bar,
   BarChart,
@@ -40,6 +41,10 @@ import {
 } from "@/lib/reports-data";
 
 export const Route = createFileRoute("/reports")({
+  validateSearch: z.object({
+    start: z.string().optional().catch(undefined),
+    end: z.string().optional().catch(undefined),
+  }),
   head: () => ({
     meta: [
       { title: "Reports — ExpenseFlow" },
@@ -50,7 +55,12 @@ export const Route = createFileRoute("/reports")({
 });
 
 function ReportsPage() {
-  const [range, setRange] = useState<ReportRange>(defaultReportRange);
+  const search = Route.useSearch();
+  const initialRange = defaultReportRange();
+  const [range, setRange] = useState<ReportRange>({
+    start: search.start ?? initialRange.start,
+    end: search.end ?? initialRange.end,
+  });
   const [exporting, setExporting] = useState(false);
   const report = useReportData(range);
   const data = report.data;

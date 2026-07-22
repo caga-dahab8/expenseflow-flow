@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { getDatabase } from "../../database/client.js";
 import { authenticate } from "../../middleware/authenticate.js";
 import { authorizeWorkspace } from "../../middleware/authorize-workspace.js";
+import { materializeDueRecurring } from "../operations/recurring.js";
 
 function dateKey(date: Date, timeZone: string, includeDay = false) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -46,6 +47,7 @@ function percentageChange(current: number, previous: number) {
 export const dashboardRoutes: FastifyPluginAsync = async (app) => {
   app.get("/dashboard", { preHandler: [authenticate, authorizeWorkspace] }, async (request) => {
     const db = await getDatabase();
+    await materializeDueRecurring(db, request.workspace!.id);
     const workspace = await db
       .collection("workspaces")
       .findOne({ _id: request.workspace!.id }, { projection: { settings: 1 } });
@@ -308,6 +310,35 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
     );
     const totalBudgetMinor = budgetProgress.reduce((sum, budget) => sum + budget.amountMinor, 0);
     const budgetSpentMinor = budgetProgress.reduce((sum, budget) => sum + budget.spentMinor, 0);
+
+    for (const budget of budgetProgress) {
+      const percentage =
+        budget.amountMinor > 0 ? (budget.spentMinor / budget.amountMinor) * 100 : 0;
+      if (percentage < 80) continue;
+      const exceeded = percentage >= 100;
+      await db.collection("notifications").updateOne(
+        {
+          userId: request.auth!.userId,
+          workspaceId: request.workspace!.id,
+          type: exceeded ? "budget_exceeded" : "budget_warning",
+          title: `${budget.name} budget ${currentMonth}`,
+        },
+        {
+          $setOnInsert: {
+            userId: request.auth!.userId,
+            workspaceId: request.workspace!.id,
+            type: exceeded ? "budget_exceeded" : "budget_warning",
+            title: `${budget.name} budget ${currentMonth}`,
+            message: exceeded
+              ? `${budget.name} has exceeded its monthly budget.`
+              : `${budget.name} has reached ${Math.round(percentage)}% of its monthly budget.`,
+            actionUrl: "/budgets",
+            createdAt: now,
+          },
+        },
+        { upsert: true },
+      );
+    }
 
     return {
       currency,

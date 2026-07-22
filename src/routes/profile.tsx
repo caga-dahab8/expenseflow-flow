@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, KeyRound, Loader2, Mail, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Camera, CheckCircle2, KeyRound, Loader2, Mail, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/page-header";
@@ -18,7 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { initials, useChangePassword, useCurrentUser, useUpdateProfile } from "@/lib/auth";
+import {
+  initials,
+  useChangePassword,
+  useCurrentUser,
+  useRequestVerification,
+  useUpdateAvatar,
+  useUpdateProfile,
+} from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
 
 export const Route = createFileRoute("/profile")({
@@ -36,6 +43,9 @@ function ProfilePage() {
   const { activeWorkspace, workspaces } = useWorkspace();
   const updateProfile = useUpdateProfile();
   const changePassword = useChangePassword();
+  const updateAvatar = useUpdateAvatar();
+  const requestVerification = useRequestVerification();
+  const avatarInput = useRef<HTMLInputElement>(null);
   const user = auth.data!.user;
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
@@ -85,15 +95,77 @@ function ProfilePage() {
         <Card className="h-fit rounded-xl">
           <CardContent className="p-6">
             <div className="flex flex-col items-center text-center">
-              <Avatar className="h-24 w-24 border-4 border-background shadow-md">
-                <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
-                <AvatarFallback className="text-2xl">{initials(user.name)}</AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-24 w-24 border-4 border-background shadow-md">
+                  <AvatarImage src={user.avatarUrl ?? undefined} alt={user.name} />
+                  <AvatarFallback className="text-2xl">{initials(user.name)}</AvatarFallback>
+                </Avatar>
+                <Button
+                  type="button"
+                  size="icon"
+                  className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full"
+                  onClick={() => avatarInput.current?.click()}
+                  disabled={updateAvatar.isPending}
+                  aria-label="Change profile photo"
+                >
+                  {updateAvatar.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Camera className="h-4 w-4" />
+                  )}
+                </Button>
+                <input
+                  ref={avatarInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 1_000_000) {
+                      toast.error("Choose an image smaller than 1 MB");
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      try {
+                        await updateAvatar.mutateAsync(String(reader.result));
+                        toast.success("Profile photo updated");
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error ? error.message : "Could not update the photo",
+                        );
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </div>
               <h2 className="mt-4 font-display text-xl font-semibold">{user.name}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
               <Badge variant="secondary" className="mt-3 capitalize">
                 {activeWorkspace?.role ?? "member"}
               </Badge>
+              {!user.emailVerified && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3"
+                  disabled={requestVerification.isPending}
+                  onClick={async () => {
+                    try {
+                      const { token } = await requestVerification.mutateAsync();
+                      window.location.assign(`/verify-email?token=${encodeURIComponent(token)}`);
+                    } catch (error) {
+                      toast.error(
+                        error instanceof Error ? error.message : "Could not verify email",
+                      );
+                    }
+                  }}
+                >
+                  Verify email
+                </Button>
+              )}
             </div>
             <Separator className="my-6" />
             <div className="space-y-4 text-sm">

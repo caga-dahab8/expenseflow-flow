@@ -94,6 +94,14 @@ function LoginPage() {
                   </FormItem>
                 )}
               />
+              <div className="flex justify-end">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               {form.formState.errors.root && (
                 <p className="text-sm text-destructive">{form.formState.errors.root.message}</p>
               )}

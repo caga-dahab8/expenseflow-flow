@@ -1,15 +1,36 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Download, KeyRound, Loader2, MonitorCog, PanelsTopLeft, ShieldCheck } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  Download,
+  KeyRound,
+  Loader2,
+  MonitorCog,
+  PanelsTopLeft,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/page-header";
 import { useTheme } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { apiDownload } from "@/lib/api-client";
-import { useLogoutOtherSessions } from "@/lib/auth";
+import { useDeleteAccount, useLogoutOtherSessions } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
 
 export const Route = createFileRoute("/settings")({
@@ -26,6 +47,9 @@ function SettingsPage() {
   const { theme, toggle } = useTheme();
   const { activeWorkspace } = useWorkspace();
   const logoutOtherSessions = useLogoutOtherSessions();
+  const deleteAccount = useDeleteAccount();
+  const navigate = useNavigate();
+  const [deletePassword, setDeletePassword] = useState("");
 
   async function exportData() {
     try {
@@ -139,6 +163,62 @@ function SettingsPage() {
                 <Download className="mr-2 h-4 w-4" /> Export CSV
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border-destructive/30 lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base text-destructive">
+              <ShieldAlert className="h-4 w-4" /> Account deletion
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-sm font-medium">Delete your ExpenseFlow account</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Access is removed immediately and workspaces you own are archived.
+              </p>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive">Delete account</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action signs you out everywhere and cannot be undone from the application.
+                    Enter your password to confirm.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <Input
+                  type="password"
+                  placeholder="Current password"
+                  value={deletePassword}
+                  onChange={(event) => setDeletePassword(event.target.value)}
+                />
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={!deletePassword || deleteAccount.isPending}
+                    onClick={async (event) => {
+                      event.preventDefault();
+                      try {
+                        await deleteAccount.mutateAsync(deletePassword);
+                        await navigate({ to: "/login", replace: true });
+                      } catch (error) {
+                        toast.error(
+                          error instanceof Error ? error.message : "Could not delete the account",
+                        );
+                      }
+                    }}
+                  >
+                    {deleteAccount.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Permanently delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
         </Card>
       </div>

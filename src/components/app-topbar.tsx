@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { initials, useCurrentUser, useLogout } from "@/lib/auth";
+import { useGlobalSearch, useNotifications, useReadNotifications } from "@/lib/operations";
 import { useIncomingWorkspaceInvitations, useWorkspace } from "@/lib/workspace";
 
 export function AppTopbar() {
@@ -26,10 +27,15 @@ export function AppTopbar() {
   const auth = useCurrentUser();
   const logout = useLogout();
   const invitations = useIncomingWorkspaceInvitations();
+  const notifications = useNotifications();
+  const readNotifications = useReadNotifications();
   const { activeWorkspace } = useWorkspace();
   const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const searchResults = useGlobalSearch(search);
   const user = auth.data!.user;
   const pending = invitations.data?.invitations ?? [];
+  const unread = (notifications.data?.unread ?? 0) + pending.length;
 
   async function submitSearch(event: FormEvent) {
     event.preventDefault();
@@ -52,41 +58,110 @@ export function AppTopbar() {
           className="h-9 rounded-lg border-transparent bg-muted/50 pl-9 focus-visible:bg-background"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => window.setTimeout(() => setSearchFocused(false), 150)}
         />
+        {searchFocused && search.trim().length >= 2 && (
+          <div className="absolute left-0 right-0 top-11 overflow-hidden rounded-xl border bg-popover shadow-xl">
+            {searchResults.isPending ? (
+              <p className="p-4 text-sm text-muted-foreground">Searching…</p>
+            ) : searchResults.data &&
+              (searchResults.data.transactions.length ||
+                searchResults.data.categories.length ||
+                searchResults.data.reports.length) ? (
+              <div className="max-h-96 overflow-y-auto p-2">
+                {searchResults.data.transactions.map((item) => (
+                  <Link
+                    key={item.id}
+                    to="/expenses"
+                    search={{ q: item.title }}
+                    className="block rounded-lg px-3 py-2 hover:bg-muted"
+                  >
+                    <p className="text-sm font-medium">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Expense · {(item.amountMinor / 100).toFixed(2)} {item.currency}
+                    </p>
+                  </Link>
+                ))}
+                {searchResults.data.categories.map((item) => (
+                  <Link
+                    key={item.id}
+                    to="/categories"
+                    className="block rounded-lg px-3 py-2 hover:bg-muted"
+                  >
+                    <p className="text-sm font-medium">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">Category</p>
+                  </Link>
+                ))}
+                {searchResults.data.reports.map((item) => (
+                  <Link
+                    key={item.id}
+                    to="/automation"
+                    className="block rounded-lg px-3 py-2 hover:bg-muted"
+                  >
+                    <p className="text-sm font-medium">{item.name}</p>
+                    <p className="text-xs text-muted-foreground">Saved report</p>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">
+                No matching expenses, categories, or reports.
+              </p>
+            )}
+          </div>
+        )}
       </form>
       <div className="ml-auto flex items-center gap-1.5">
         <ThemeToggle />
         <Popover>
           <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="relative"
-              aria-label="Workspace invitations"
-            >
+            <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
               <Bell className="h-4 w-4" />
-              {pending.length > 0 && (
+              {unread > 0 && (
                 <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                  {pending.length}
+                  {unread}
                 </span>
               )}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0">
             <div className="flex items-center justify-between border-b px-4 py-3">
-              <span className="text-sm font-semibold">Invitations</span>
-              {pending.length > 0 && <Badge variant="secondary">{pending.length} pending</Badge>}
+              <span className="text-sm font-semibold">Notifications</span>
+              {unread > 0 && <Badge variant="secondary">{unread} new</Badge>}
             </div>
-            {invitations.isPending ? (
+            {notifications.isPending || invitations.isPending ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Checking invitations…
+                Checking notifications…
               </p>
-            ) : pending.length === 0 ? (
+            ) : pending.length === 0 && !notifications.data?.notifications.length ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                You have no pending invitations.
+                You’re all caught up.
               </p>
             ) : (
               <div className="divide-y">
+                {(notifications.data?.notifications ?? []).slice(0, 5).map((notification) => (
+                  <Link
+                    key={notification.id}
+                    to={
+                      notification.actionUrl === "/expenses"
+                        ? "/expenses"
+                        : notification.actionUrl === "/automation"
+                          ? "/automation"
+                          : notification.actionUrl === "/budgets"
+                            ? "/budgets"
+                            : "/"
+                    }
+                    search={notification.actionUrl === "/expenses" ? {} : undefined}
+                    className="block px-4 py-3 transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium">{notification.title}</p>
+                      {!notification.readAt && <span className="h-2 w-2 rounded-full bg-primary" />}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{notification.message}</p>
+                  </Link>
+                ))}
                 {pending.slice(0, 4).map((invitation) => (
                   <Link
                     key={invitation.id}
@@ -99,6 +174,14 @@ export function AppTopbar() {
                     </p>
                   </Link>
                 ))}
+                {(notifications.data?.unread ?? 0) > 0 && (
+                  <button
+                    className="w-full px-4 py-3 text-left text-xs font-medium text-primary hover:bg-muted/50"
+                    onClick={() => readNotifications.mutate()}
+                  >
+                    Mark all as read
+                  </button>
+                )}
               </div>
             )}
           </PopoverContent>

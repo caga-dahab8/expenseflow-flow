@@ -260,6 +260,31 @@ export const transactionRoutes: FastifyPluginAsync = async (app) => {
           },
           { session },
         );
+        const recipients = await db
+          .collection("workspaceMembers")
+          .find(
+            {
+              workspaceId: request.workspace!.id,
+              status: "active",
+              userId: { $ne: request.auth!.userId },
+            },
+            { session, projection: { userId: 1 } },
+          )
+          .toArray();
+        if (recipients.length) {
+          await db.collection("notifications").insertMany(
+            recipients.map((member) => ({
+              userId: member.userId,
+              workspaceId: request.workspace!.id,
+              type: "transaction_created",
+              title: "New workspace expense",
+              message: `${input.title} was added to the workspace.`,
+              actionUrl: "/expenses",
+              createdAt: now,
+            })),
+            { session },
+          );
+        }
       });
     } finally {
       await session.endSession();

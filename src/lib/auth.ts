@@ -6,6 +6,7 @@ export type AuthUser = {
   name: string;
   email: string;
   avatarUrl: string | null;
+  emailVerified: boolean;
   preferences: {
     currency?: string;
     timezone?: string;
@@ -27,6 +28,7 @@ export type AuthResponse = {
   user: AuthUser;
   workspaces?: WorkspaceSummary[];
   workspace?: WorkspaceSummary;
+  verificationToken?: string;
 };
 
 export const authQueryKey = ["auth", "me"] as const;
@@ -119,6 +121,44 @@ export function useChangePassword() {
 export function useLogoutOtherSessions() {
   return useMutation({
     mutationFn: () => apiRequest<void>("/api/auth/logout-other-sessions", { method: "POST" }),
+  });
+}
+
+export function useUpdateAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dataUrl: string) =>
+      apiRequest<{ user: AuthUser }>("/api/auth/avatar", {
+        method: "PATCH",
+        body: JSON.stringify({ dataUrl }),
+      }),
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData<AuthResponse>(authQueryKey, (current) =>
+        current ? { ...current, user } : { user },
+      );
+    },
+  });
+}
+
+export function useRequestVerification() {
+  return useMutation({
+    mutationFn: () =>
+      apiRequest<{ token: string }>("/api/auth/request-verification", { method: "POST" }),
+  });
+}
+
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) =>
+      apiRequest<void>("/api/auth/account", {
+        method: "DELETE",
+        body: JSON.stringify({ password }),
+      }),
+    onSuccess: () => {
+      queryClient.removeQueries();
+      window.localStorage.removeItem(ACTIVE_WORKSPACE_KEY);
+    },
   });
 }
 

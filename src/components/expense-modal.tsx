@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Download, Loader2, Paperclip, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -26,6 +26,7 @@ import {
   useSaveTransaction,
   type Transaction,
 } from "@/lib/financial-data";
+import { useAttachmentActions, useAttachments } from "@/lib/operations";
 
 export function ExpenseModal({
   open,
@@ -39,6 +40,8 @@ export function ExpenseModal({
   const accountsQuery = useAccounts();
   const categoriesQuery = useCategories();
   const save = useSaveTransaction();
+  const attachments = useAttachments(transaction?.id);
+  const attachmentActions = useAttachmentActions(transaction?.id);
   const resetSave = save.reset;
   const accounts = useMemo(
     () => (accountsQuery.data?.accounts ?? []).filter((item) => item.status === "active"),
@@ -123,6 +126,72 @@ export function ExpenseModal({
               required
             />
           </div>
+          {transaction && (
+            <div className="grid gap-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label>Receipts and attachments</Label>
+                  <p className="text-xs text-muted-foreground">Images or PDF files up to 2 MB.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" asChild>
+                  <label className="cursor-pointer">
+                    <Paperclip className="mr-1.5 h-4 w-4" /> Attach
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/png,image/jpeg,image/webp,application/pdf"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2_000_000)
+                          return toast.error("Choose a file smaller than 2 MB");
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                          try {
+                            await attachmentActions.upload.mutateAsync({
+                              transactionId: transaction.id,
+                              fileName: file.name,
+                              mimeType: file.type,
+                              sizeBytes: file.size,
+                              dataUrl: String(reader.result),
+                            });
+                            toast.success("Attachment uploaded");
+                          } catch (error) {
+                            toast.error(error instanceof Error ? error.message : "Upload failed");
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                </Button>
+              </div>
+              {(attachments.data?.attachments ?? []).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm"
+                >
+                  <span className="min-w-0 truncate">{item.fileName}</span>
+                  <div className="flex shrink-0">
+                    <Button type="button" variant="ghost" size="icon" asChild>
+                      <a href={item.dataUrl} download={item.fileName}>
+                        <Download className="h-4 w-4" />
+                      </a>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive"
+                      onClick={() => attachmentActions.remove.mutate(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label>Category</Label>
